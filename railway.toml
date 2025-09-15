@@ -3,11 +3,7 @@ builder = "nixpacks"
 buildCommand = "pip install -r requirements.txt"
 
 [deploy]
-startCommand = "bash -c 'cd /app && PYTHONPATH=/app python -m uvicorn app.main:app --host 0.0.0.0 --port \'"
-healthcheckPath = "/health"
-healthcheckTimeout = 10
-restartPolicyType = "always"
-restartPolicyMaxRetries = 3
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
 [resource]
 cpu = 1
