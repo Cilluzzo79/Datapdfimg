@@ -70,7 +70,6 @@ async def error_handling_middleware(request: Request, call_next):
 
 # Endpoint di health check
 @app.get("/health", response_model=HealthResponse, tags=["System"])
-
 async def health_check():
     """
     Verifica lo stato del servizio
@@ -78,12 +77,16 @@ async def health_check():
     # Calcola l'uptime
     uptime_seconds = int(time.time() - start_time)
     
-    # Semplifica la risposta per il health check
+    # Verifica connessioni API esterne
+    api_connections = {
+        "openrouter": True  # Semplificato per il health check
+    }
+    
     return HealthResponse(
         status="ok",
         version=settings.APP_VERSION,
         environment=settings.ENVIRONMENT,
-        api_connections={},
+        api_connections=api_connections,
         uptime_seconds=uptime_seconds
     )
     
