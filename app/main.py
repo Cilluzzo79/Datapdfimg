@@ -298,3 +298,8 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+# Endpoint root semplice per verifica
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "Railway Document Worker is running"}

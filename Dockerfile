@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+﻿FROM python:3.11-slim
 
 # Imposta la directory di lavoro
 WORKDIR /app
@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copia i file necessari
+# Copia requirements.txt
 COPY requirements.txt .
 
 # Installa le dipendenze Python
@@ -23,15 +23,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copia il resto dell'applicazione
 COPY . .
 
-# Crea directory temporanea per i file
-RUN mkdir -p /tmp/railway-document-worker && chmod 777 /tmp/railway-document-worker
+# Esporta la variabile PYTHONPATH
+ENV PYTHONPATH=/app
 
-# Esegui come utente non root
-RUN useradd -m appuser
-USER appuser
-
-# Esponi la porta
-EXPOSE 8000
-
-# Comando per avviare l'applicazione
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Comando diretto per avviare l'app
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
