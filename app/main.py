@@ -303,3 +303,13 @@ async def health_check():
 @app.get("/")
 async def root():
     return {"status": "ok", "message": "Railway Document Worker is running"}
+
+# Endpoint semplice di health check
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+# Endpoint root per sicurezza
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "Railway Document Worker is running"}
