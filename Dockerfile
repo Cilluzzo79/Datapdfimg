@@ -8,5 +8,5 @@ RUN pip install fastapi uvicorn
 # Copia solo l'app minima
 COPY app.py .
 
-# Avvia l'app
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Avvia l'app utilizzando la variabile d'ambiente PORT
+CMD uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}
