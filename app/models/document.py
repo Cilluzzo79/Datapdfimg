@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+﻿from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional, Literal
 from enum import Enum
 from datetime import datetime
@@ -124,3 +124,5 @@ class DocumentProcessingResult(BaseModel):
             return AnalisiMercatoData(**self.extracted_data)
         else:
             return self.extracted_data
+
+
