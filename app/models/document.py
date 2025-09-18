@@ -88,7 +88,22 @@ class AnalisiMercatoData(BaseModel):
 
 class ExtractedData(BaseModel):
     """Dati estratti dal documento, la struttura dipende dal tipo di documento"""
-    __root__: Dict[str, Any] = {}
+    data: Dict[str, Any] = Field(default_factory=dict)
+    
+    def __getitem__(self, key):
+        return self.data[key]
+    
+    def __setitem__(self, key, value):
+        self.data[key] = value
+    
+    def __contains__(self, key):
+        return key in self.data
+    
+    def dict(self):
+        return self.data
+        
+    def model_dump(self):
+        return self.data
 
 
 class ProcessingNote(BaseModel):

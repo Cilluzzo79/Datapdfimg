@@ -1,2 +1,7 @@
-﻿[build]
+[build]
 builder = "DOCKERFILE"
+
+[deploy]
+healthcheck_path = "/health"
+healthcheck_timeout_sec = 5
+restarts = 5
