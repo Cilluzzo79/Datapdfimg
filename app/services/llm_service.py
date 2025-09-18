@@ -42,7 +42,7 @@ class LLMService:
             logger.info(f"Chiamata API LLM con prompt di {len(prompt)} caratteri")
             
             headers = {
-                "Authorization": f"Bearer {self.api_key}",
+                "Authorization": f"Bearer {self.api_key.strip()}",
                 "Content-Type": "application/json"
             }
             
@@ -103,7 +103,7 @@ class LLMService:
                 base64_image = base64.b64encode(image_file.read()).decode("utf-8")
             
             headers = {
-                "Authorization": f"Bearer {self.api_key}",
+                "Authorization": f"Bearer {self.api_key.strip()}",
                 "Content-Type": "application/json"
             }
             
