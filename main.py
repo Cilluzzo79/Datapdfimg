@@ -1,15 +1,30 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Form, Request, Depends
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import uuid
 import time
-from typing import Optional
+import json
+from datetime import datetime
+from typing import Optional, Dict, Any
 
-# Importazioni minime dalle utilities e configurazioni
+# Importazioni dalle utilities e configurazioni
 from app.utils.validators import validate_file
-from app.utils.file_utils import save_upload_file, cleanup_temp_file
-from app.utils.logging_utils import get_logger
+from app.utils.file_utils import save_upload_file, cleanup_temp_file, cleanup_temp_directory
+from app.utils.logging_utils import get_logger, log_request, log_response, log_error
 from app.config.settings import settings
+
+# Importazioni dai modelli
+from app.models.document import ProcessingRequest, DocumentType
+from app.models.response import (
+    HealthResponse, 
+    ErrorResponse, 
+    ProcessDocumentResponse,
+    WebhookTestResponse
+)
+
+# Importazione del servizio di elaborazione documenti
+from app.services.document_processor import DocumentProcessor
 
 logger = get_logger(__name__)
 
@@ -31,12 +46,36 @@ app.add_middleware(
 
 # Variabili globali per monitorare lo stato del servizio
 start_time = time.time()
+document_processor = DocumentProcessor()
+
+
+# Middleware per catturare errori globali
+@app.middleware("http")
+async def error_handling_middleware(request: Request, call_next):
+    request_id = str(uuid.uuid4())
+    
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        logger.exception(f"Errore non gestito: {e}")
+        
+        error_response = ErrorResponse(
+            error_code="server_error",
+            message="Si è verificato un errore interno del server",
+            details={"error": str(e)}
+        )
+        
+        return JSONResponse(
+            status_code=500,
+            content=error_response.model_dump()
+        )
 
 @app.get("/")
 def root():
     return {"status": "ok", "message": "Railway Document Worker is running"}
 
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse)
 def health_check():
     """
     Verifica lo stato del servizio
@@ -44,13 +83,109 @@ def health_check():
     # Calcola l'uptime
     uptime_seconds = int(time.time() - start_time)
     
-    return {
-        "status": "ok",
-        "version": settings.APP_VERSION,
-        "environment": settings.ENVIRONMENT,
-        "api_connections": {"openrouter": True},
-        "uptime_seconds": uptime_seconds
+    # Verifica connessioni API esterne
+    api_connections = {
+        "openrouter": True  # Da implementare controllo effettivo
     }
+    
+    return HealthResponse(
+        status="ok",
+        version=settings.APP_VERSION,
+        environment=settings.ENVIRONMENT,
+        api_connections=api_connections,
+        uptime_seconds=uptime_seconds
+    )
+
+@app.post("/process-document", response_model=ProcessDocumentResponse)
+async def process_document(
+    file: UploadFile = File(...),
+    document_type: Optional[str] = Form(None),
+    custom_metadata: Optional[str] = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    """
+    Processa un documento (immagine o PDF) ed estrae informazioni strutturate
+    """
+    request_id = str(uuid.uuid4())
+    start_process_time = time.time()
+    
+    try:
+        # Log della richiesta
+        log_request(
+            request_id=request_id,
+            endpoint="/process-document",
+            metadata={"filename": file.filename, "document_type": document_type}
+        )
+        
+        # Valida il file
+        file_type, original_filename = await validate_file(file)
+        
+        # Crea la richiesta di processamento
+        processing_request = ProcessingRequest(
+            document_id=str(uuid.uuid4()),
+            document_type_hint=DocumentType(document_type) if document_type else None,
+            custom_metadata=json.loads(custom_metadata) if custom_metadata else None
+        )
+        
+        # Salva il file
+        file_path, md5_hash, file_size = await save_upload_file(file)
+        
+        # Processa il documento
+        result = await document_processor.process_document(
+            file_path=file_path,
+            original_filename=original_filename,
+            file_size=file_size,
+            md5_hash=md5_hash,
+            request=processing_request
+        )
+        
+        # Calcola il tempo di elaborazione
+        processing_time_ms = int((time.time() - start_process_time) * 1000)
+        
+        # Preparazione della risposta
+        response = ProcessDocumentResponse(
+            document_id=result.document_id,
+            document_type=result.document_type.value,
+            confidence_score=result.confidence_score,
+            processing_time_ms=processing_time_ms,
+            result_json=result.model_dump(),
+            processing_notes=result.processing_notes
+        )
+        
+        # Log della risposta
+        log_response(
+            request_id=request_id,
+            endpoint="/process-document",
+            status_code=200,
+            processing_time_ms=processing_time_ms
+        )
+        
+        # Aggiungi task in background per la pulizia periodica
+        background_tasks.add_task(cleanup_temp_directory)
+        
+        return response
+    except HTTPException as e:
+        # Rilancia le eccezioni HTTP già gestite
+        log_error(
+            request_id=request_id,
+            endpoint="/process-document",
+            error_msg=e.detail,
+            error_details={"status_code": e.status_code}
+        )
+        raise
+    except Exception as e:
+        # Gestione errori generici
+        log_error(
+            request_id=request_id,
+            endpoint="/process-document",
+            error_msg=str(e),
+            error_details={"exception": str(type(e).__name__)}
+        )
+        
+        raise HTTPException(
+            status_code=500,
+            detail=f"Errore durante il processamento del documento: {str(e)}"
+        )
 
 @app.post("/process-document-simple")
 async def process_document_simple(
@@ -167,4 +302,4 @@ async def shutdown_event():
 # Punto di ingresso per il server uvicorn
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
