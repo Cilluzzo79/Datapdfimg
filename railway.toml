@@ -1,6 +1,6 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.minimal"
+dockerfilePath = "Dockerfile.intermedio"
 
 [deploy]
 healthcheckPath = "/health"
