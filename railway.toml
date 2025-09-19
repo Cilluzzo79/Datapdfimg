@@ -1,6 +1,6 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.tabular"
+dockerfilePath = "Dockerfile.pandas_test"
 
 [deploy]
 healthcheckPath = "/health"

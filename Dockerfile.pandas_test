@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Installiamo le dipendenze, incluso pandas, ma senza usarlo
+RUN pip install fastapi uvicorn pandas
+
+# Copiamo solo main.py semplificato
+COPY app/main.py ./app/
+
+# Creiamo __init__.py
+RUN mkdir -p app
+RUN touch app/__init__.py
+
+# Esponiamo la porta
+ENV PORT=8080
+
+# Comando per eseguire l'applicazione
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --log-level debug"]
