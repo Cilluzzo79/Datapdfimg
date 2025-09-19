@@ -1,0 +1,21 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Installiamo solo fastapi e uvicorn
+RUN pip install fastapi uvicorn
+
+# Creiamo la struttura del pacchetto app
+RUN mkdir -p app
+
+# Copiamo solo il file main_simple.py
+COPY app/main_simple.py app/main.py
+
+# Creiamo un __init__.py vuoto
+RUN touch app/__init__.py
+
+# Esponiamo la porta
+ENV PORT=8080
+
+# Comando per eseguire l'applicazione
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --log-level debug"]

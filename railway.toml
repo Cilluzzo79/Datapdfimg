@@ -1,6 +1,6 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.intermedio"
+dockerfilePath = "Dockerfile.ultra"
 
 [deploy]
 healthcheckPath = "/health"
