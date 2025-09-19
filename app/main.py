@@ -11,6 +11,7 @@ from app.models.response import DocumentResponse
 from app.utils.validators import validate_file
 from app.utils.logging_utils import get_logger
 from app.services.tabular_processor import TabularProcessor
+from app.config.settings import settings
 # Importare gli altri processor quando saranno implementati
 # from app.services.image_processor import ImageProcessor
 # from app.services.pdf_processor import PdfProcessor
@@ -38,7 +39,13 @@ async def health_check():
     """
     Endpoint per verificare lo stato dell'API
     """
-    return {"status": "healthy", "message": "API operativa"}
+    # Aggiungiamo più informazioni per il debug
+    return {
+        "status": "healthy", 
+        "message": "API operativa",
+        "environment": settings.ENVIRONMENT,
+        "version": "1.0.1"
+    }
 
 
 @app.post("/process-document", response_model=DocumentResponse)
