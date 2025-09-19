@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Installiamo le dipendenze di base e pandas per CSV/Excel
+RUN pip install fastapi uvicorn pandas openpyxl xlrd
+
+# Copiamo la struttura del progetto e i file necessari
+COPY app ./app
+
+# Assicuriamoci che il file __init__.py esista in tutte le directory
+RUN mkdir -p app/config app/models app/services app/utils
+RUN touch app/__init__.py app/config/__init__.py app/models/__init__.py app/services/__init__.py app/utils/__init__.py
+
+# Esponiamo la porta
+ENV PORT=8080
+
+# Comando per eseguire l'applicazione
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --log-level debug"]
