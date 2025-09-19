@@ -39,13 +39,8 @@ async def health_check():
     """
     Endpoint per verificare lo stato dell'API
     """
-    # Aggiungiamo più informazioni per il debug
-    return {
-        "status": "healthy", 
-        "message": "API operativa",
-        "environment": settings.ENVIRONMENT,
-        "version": "1.0.1"
-    }
+    # Endpoint ultra-semplice senza dipendenze
+    return {"status": "healthy"}
 
 
 @app.post("/process-document", response_model=DocumentResponse)
