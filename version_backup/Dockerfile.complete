@@ -1,0 +1,15 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Dipendenze per elaborazione tabellare e PDF
+RUN pip install fastapi uvicorn pandas openpyxl xlrd python-multipart pydantic pypdf
+
+# Copiamo il codice dell'applicazione
+COPY app ./app
+
+# Esponiamo la porta
+ENV PORT=8080
+
+# Comando per eseguire l'applicazione
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --log-level debug"]
