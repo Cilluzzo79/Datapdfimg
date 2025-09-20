@@ -98,17 +98,53 @@ class LLMService:
         try:
             logger.info(f"Analisi immagine con Mistral Vision: {image_path}")
             
+            # Controlla se Mistral Vision è abilitato
+            if not settings.ENABLE_MISTRAL_VISION:
+                logger.warning("Mistral Vision non abilitato nelle impostazioni")
+                return {
+                    "error": "Mistral Vision non abilitato",
+                    "choices": [{
+                        "message": {
+                            "content": json.dumps({
+                                "document_type": "sconosciuto",
+                                "confidence_score": 0.0,
+                                "error": "Mistral Vision non abilitato"
+                            })
+                        }
+                    }]
+                }
+            
+            # Controlla se è disponibile un'API key per Mistral
+            api_key = settings.MISTRAL_API_KEY
+            if not api_key:
+                logger.warning("API key Mistral non configurata")
+                return {
+                    "error": "API key Mistral non configurata",
+                    "choices": [{
+                        "message": {
+                            "content": json.dumps({
+                                "document_type": "sconosciuto",
+                                "confidence_score": 0.0,
+                                "error": "API key Mistral non configurata"
+                            })
+                        }
+                    }]
+                }
+            
             # Leggi l'immagine e convertila in base64
             with open(image_path, "rb") as image_file:
                 base64_image = base64.b64encode(image_file.read()).decode("utf-8")
             
             headers = {
-                "Authorization": f"Bearer {self.api_key.strip()}",
+                "Authorization": f"Bearer {api_key.strip()}",
                 "Content-Type": "application/json"
             }
             
+            # Utilizziamo l'endpoint Mistral nativo invece di OpenRouter
+            api_url = "https://api.mistral.ai/v1"
+            
             payload = {
-                "model": self.model,
+                "model": "mistral-large-latest",  # Modello con supporto visione
                 "messages": [
                     {
                         "role": "user",
@@ -133,7 +169,7 @@ class LLMService:
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
-                    f"{self.api_url}/chat/completions",
+                    f"{api_url}/chat/completions",
                     headers=headers,
                     json=payload
                 )
