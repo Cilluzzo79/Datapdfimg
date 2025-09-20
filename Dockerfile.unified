@@ -1,0 +1,32 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Installiamo dipendenze di sistema minime
+RUN apt-get update && apt-get install -y \
+    poppler-utils \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiamo prima i file di requirements per migliore caching
+COPY requirements.unified.txt .
+RUN pip install --no-cache-dir -r requirements.unified.txt
+
+# Copiamo il codice dell'applicazione
+COPY app ./app
+
+# Configurazione feature flags
+ENV ENABLE_TABULAR_PROCESSING=true
+ENV ENABLE_PDF_PROCESSING=true
+ENV ENABLE_ADVANCED_PDF=false
+ENV ENABLE_OCR=false
+ENV ENABLE_IMAGE_PROCESSING=false
+
+# Esponiamo la porta
+ENV PORT=8080
+
+# Aumentiamo il timeout di avvio
+ENV UVICORN_TIMEOUT=120
+
+# Comando per eseguire l'applicazione
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --log-level debug --timeout-keep-alive 120"]

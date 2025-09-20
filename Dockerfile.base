@@ -1,0 +1,23 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Installiamo le dipendenze di sistema necessarie per Pandas
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Installiamo le dipendenze Python di base
+RUN pip install --no-cache-dir fastapi uvicorn python-multipart
+
+# Creiamo un file main.py molto semplice
+RUN mkdir -p app
+RUN echo 'from fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get("/")\ndef read_root():\n    return {"Hello": "World"}\n\n@app.get("/health")\ndef health():\n    return {"status": "healthy"}' > app/main.py
+RUN touch app/__init__.py
+
+# Esponiamo la porta
+ENV PORT=8080
+
+# Comando per eseguire l'applicazione
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --log-level debug"]

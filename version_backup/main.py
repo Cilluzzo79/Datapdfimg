@@ -1,5 +1,5 @@
 """
-FastAPI app principale con supporto per feature flags
+FastAPI app principale
 """
 import time
 from typing import Optional
@@ -9,8 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.models.document import DocumentRequest
 from app.models.response import DocumentResponse
 from app.services.tabular_processor import TabularProcessor
-from app.services.pdf_processor_simple import PDFProcessor
-from app.config import settings
+from app.services.pdf_processor import PDFProcessor
 
 app = FastAPI(
     title="Document Processing API",
@@ -29,38 +28,11 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    # Mostra lo stato dei feature flags
-    features = {
-        "tabular_processing": settings.ENABLE_TABULAR_PROCESSING,
-        "pdf_processing": settings.ENABLE_PDF_PROCESSING,
-        "advanced_pdf": settings.ENABLE_ADVANCED_PDF,
-        "ocr": settings.ENABLE_OCR,
-        "image_processing": settings.ENABLE_IMAGE_PROCESSING
-    }
-    
-    return {
-        "message": "Document Worker API - Versione 1.0",
-        "features": features
-    }
+    return {"message": "Tabular Data Processor - Versione 1.0"}
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
-
-@app.get("/features")
-async def feature_flags():
-    """
-    Mostra lo stato corrente dei feature flags
-    """
-    return {
-        "features": {
-            "tabular_processing": settings.ENABLE_TABULAR_PROCESSING,
-            "pdf_processing": settings.ENABLE_PDF_PROCESSING,
-            "advanced_pdf": settings.ENABLE_ADVANCED_PDF,
-            "ocr": settings.ENABLE_OCR,
-            "image_processing": settings.ENABLE_IMAGE_PROCESSING
-        }
-    }
 
 @app.post("/process-document", response_model=DocumentResponse)
 async def process_document(
@@ -68,7 +40,7 @@ async def process_document(
     document_type: Optional[str] = Form(None)
 ):
     """
-    Elabora un documento caricato (CSV, Excel, PDF o Immagine)
+    Elabora un documento caricato (CSV o Excel)
     
     Args:
         file: File da elaborare
@@ -82,28 +54,14 @@ async def process_document(
     try:
         # Determina il tipo di file dall'estensione
         file_type = None
-        if file.filename.endswith(tuple(settings.ALLOWED_EXCEL_EXTENSIONS)):
-            if not settings.ENABLE_TABULAR_PROCESSING:
-                raise HTTPException(status_code=400, detail="Elaborazione file Excel disabilitata")
+        if file.filename.endswith(('.xlsx', '.xls', '.xlsm', '.xlsb')):
             file_type = "excel"
-        elif file.filename.endswith(tuple(settings.ALLOWED_CSV_EXTENSIONS)):
-            if not settings.ENABLE_TABULAR_PROCESSING:
-                raise HTTPException(status_code=400, detail="Elaborazione file CSV disabilitata")
+        elif file.filename.endswith('.csv'):
             file_type = "csv"
-        elif file.filename.endswith(tuple(settings.ALLOWED_PDF_EXTENSIONS)):
-            if not settings.ENABLE_PDF_PROCESSING:
-                raise HTTPException(status_code=400, detail="Elaborazione PDF disabilitata")
+        elif file.filename.endswith('.pdf'):
             file_type = "pdf"
-        elif file.filename.endswith(tuple(settings.ALLOWED_IMAGE_EXTENSIONS)):
-            if not settings.ENABLE_IMAGE_PROCESSING:
-                raise HTTPException(status_code=400, detail="Elaborazione immagini disabilitata")
-            file_type = "image"
         else:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Tipo di file non supportato: {file.filename}. Estensioni supportate: " + 
-                       f"{', '.join(settings.ALLOWED_EXCEL_EXTENSIONS + settings.ALLOWED_CSV_EXTENSIONS + settings.ALLOWED_PDF_EXTENSIONS + settings.ALLOWED_IMAGE_EXTENSIONS)}"
-            )
+            raise HTTPException(status_code=400, detail=f"Tipo di file non supportato: {file.filename}")
         
         # Elabora il file in base al tipo
         if file_type == "excel" or file_type == "csv":
@@ -111,7 +69,7 @@ async def process_document(
         elif file_type == "pdf":
             result = await PDFProcessor.process_pdf(file, document_type)
         else:
-            raise HTTPException(status_code=400, detail=f"Elaborazione per il tipo di file {file_type} non implementata")
+            raise HTTPException(status_code=400, detail=f"Tipo di file non supportato: {file_type}")
         
         # Calcola il tempo di elaborazione
         processing_time_ms = int((time.time() - start_time) * 1000)
