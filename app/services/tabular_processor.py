@@ -1,16 +1,10 @@
 """
 Servizio per l'elaborazione di file tabulari (Excel e CSV)
 """
-import io
-import json
-import pandas as pd
-from typing import Dict, Any, List, Optional
 from fastapi import UploadFile
-
-from app.utils.logging_utils import get_logger
-
-logger = get_logger(__name__)
-
+from typing import Dict, Any, List, Optional
+import pandas as pd
+import io
 
 class TabularProcessor:
     """
@@ -34,36 +28,52 @@ class TabularProcessor:
         Returns:
             Dizionario con i dati estratti dal file
         """
-        logger.info(f"Elaborazione file tabellare: {file.filename}, tipo: {file_type}")
-        
-        # Leggi il contenuto del file
-        content = await file.read()
-        
-        # Converti in formato JSON
-        if file_type == "excel":
-            result = TabularProcessor._excel_to_json(content, file.filename, document_type)
-        elif file_type == "csv":
-            result = TabularProcessor._csv_to_json(content, file.filename, document_type)
-        else:
-            logger.error(f"Tipo di file non supportato: {file_type}")
-            result = {
+        try:
+            # Leggi il contenuto del file
+            content = await file.read()
+            file_obj = io.BytesIO(content)
+            
+            # Converti in formato JSON
+            if file_type == "excel":
+                result = TabularProcessor._excel_to_json(file_obj, file.filename, document_type)
+            elif file_type == "csv":
+                result = TabularProcessor._csv_to_json(file_obj, file.filename, document_type)
+            else:
+                result = {
+                    "document_type": "error",
+                    "metadata": {
+                        "original_filename": file.filename,
+                        "file_type": file_type,
+                        "error": f"Tipo di file non supportato: {file_type}"
+                    },
+                    "processing_notes": ["Tipo di file non supportato"]
+                }
+            
+            # Riposiziona il cursore all'inizio del file
+            await file.seek(0)
+            
+            return result
+        except Exception as e:
+            # Gestione degli errori
+            error_details = {
+                "error_type": str(type(e).__name__),
+                "error_message": str(e),
+                "filename": file.filename,
+            }
+            return {
                 "document_type": "error",
                 "metadata": {
                     "original_filename": file.filename,
                     "file_type": file_type,
-                    "error": f"Tipo di file non supportato: {file_type}"
+                    "error": str(e)
                 },
-                "processing_notes": ["Tipo di file non supportato"]
+                "processing_notes": [f"Errore durante l'elaborazione: {str(e)}"],
+                "error_details": error_details
             }
-        
-        # Riposiziona il cursore all'inizio del file
-        await file.seek(0)
-        
-        return result
     
     @staticmethod
     def _excel_to_json(
-        file_content: bytes, 
+        file_obj: io.BytesIO, 
         filename: str, 
         document_type: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -71,26 +81,21 @@ class TabularProcessor:
         Converte un file Excel in formato JSON
         
         Args:
-            file_content: Contenuto del file Excel
+            file_obj: Contenuto del file Excel come BytesIO
             filename: Nome del file
             document_type: Tipo di documento (opzionale)
             
         Returns:
             Dizionario con i dati estratti dal file Excel
         """
-        # Crea un BytesIO object dal contenuto del file
-        excel_data = io.BytesIO(file_content)
-        
         # Leggi tutti i fogli del file Excel in un dizionario di DataFrame
         sheets_dict = {}
-        excel_file = pd.ExcelFile(excel_data)
+        excel_file = pd.ExcelFile(file_obj)
         
         # Informazioni sui fogli
         sheet_info = []
         
         for sheet_name in excel_file.sheet_names:
-            logger.info(f"Elaborazione foglio Excel: {sheet_name}")
-            
             # Leggi il foglio
             df = pd.read_excel(excel_file, sheet_name=sheet_name)
             
@@ -128,7 +133,7 @@ class TabularProcessor:
     
     @staticmethod
     def _csv_to_json(
-        file_content: bytes, 
+        file_obj: io.BytesIO, 
         filename: str, 
         document_type: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -136,29 +141,18 @@ class TabularProcessor:
         Converte un file CSV in formato JSON
         
         Args:
-            file_content: Contenuto del file CSV
+            file_obj: Contenuto del file CSV come BytesIO
             filename: Nome del file
             document_type: Tipo di documento (opzionale)
             
         Returns:
             Dizionario con i dati estratti dal file CSV
         """
-        logger.info(f"Elaborazione file CSV: {filename}")
-        
-        # Converti il contenuto in stringa
-        try:
-            # Prova con codifica UTF-8
-            file_content_str = file_content.decode('utf-8')
-        except UnicodeDecodeError:
-            # Se fallisce, prova con codifica ISO-8859-1 (Latin-1)
-            try:
-                file_content_str = file_content.decode('iso-8859-1')
-            except UnicodeDecodeError:
-                # Se fallisce ancora, prova con codifica Windows-1252
-                file_content_str = file_content.decode('cp1252')
+        # Riconverti BytesIO in stringa
+        file_content = file_obj.getvalue().decode('utf-8', errors='replace')
         
         # Rileva automaticamente il separatore
-        first_line = file_content_str.split('\n')[0]
+        first_line = file_content.split('\n')[0]
         separator = ','  # Default a virgola
         
         if ';' in first_line:
@@ -168,17 +162,12 @@ class TabularProcessor:
         elif '|' in first_line:
             separator = '|'
         
-        logger.info(f"Separatore rilevato per CSV: '{separator}'")
-        
         # Crea un DataFrame dal contenuto CSV
         df = pd.read_csv(
-            io.StringIO(file_content_str), 
+            io.StringIO(file_content), 
             sep=separator,
-            encoding='utf-8',
             engine='python',
-            error_bad_lines=False,  # Ignora righe con errori
-            on_bad_lines='skip',    # Ignora righe malformate
-            dtype=str              # Legge tutto come stringhe inizialmente
+            on_bad_lines='skip'  # Ignora righe malformate
         )
         
         # Converti il DataFrame in una lista di dizionari
@@ -237,26 +226,26 @@ class TabularProcessor:
             return "corrispettivo"
         elif any(keyword in filename_lower for keyword in ["analisi", "report", "analysis"]):
             return "analisi_mercato"
-        else:
-            # Analisi basata sulle intestazioni delle colonne
-            for sheet_name, sheet_data in data_dict.items():
-                if not sheet_data:
-                    continue
-                
-                # Prendi le chiavi del primo record
-                columns = sheet_data[0].keys()
-                columns_str = " ".join(str(col).lower() for col in columns)
-                
-                if any(keyword in columns_str for keyword in ["fattura", "invoice", "importo", "iva"]):
-                    return "fattura"
-                elif any(keyword in columns_str for keyword in ["bilancio", "balance", "attivo", "passivo"]):
-                    return "bilancio"
-                elif any(keyword in columns_str for keyword in ["magazzino", "inventory", "stock", "quantità"]):
-                    return "magazzino"
-                elif any(keyword in columns_str for keyword in ["corrispettivo", "receipt", "scontrino"]):
-                    return "corrispettivo"
-                elif any(keyword in columns_str for keyword in ["analisi", "report", "mercato", "trend"]):
-                    return "analisi_mercato"
+        
+        # Analisi basata sulle intestazioni delle colonne
+        for sheet_name, sheet_data in data_dict.items():
+            if not sheet_data:
+                continue
+            
+            # Prendi le chiavi del primo record
+            columns = sheet_data[0].keys()
+            columns_str = " ".join(str(col).lower() for col in columns)
+            
+            if any(keyword in columns_str for keyword in ["fattura", "invoice", "importo", "iva"]):
+                return "fattura"
+            elif any(keyword in columns_str for keyword in ["bilancio", "balance", "attivo", "passivo"]):
+                return "bilancio"
+            elif any(keyword in columns_str for keyword in ["magazzino", "inventory", "stock", "quantità"]):
+                return "magazzino"
+            elif any(keyword in columns_str for keyword in ["corrispettivo", "receipt", "scontrino"]):
+                return "corrispettivo"
+            elif any(keyword in columns_str for keyword in ["analisi", "report", "mercato", "trend"]):
+                return "analisi_mercato"
         
         # Default
         return "documento_generico"

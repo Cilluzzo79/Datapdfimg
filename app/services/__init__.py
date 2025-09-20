@@ -1,3 +1,3 @@
 """
-Servizi di elaborazione documenti
+__init__.py per il modulo services
 """

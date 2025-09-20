@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 import uuid
 
-
 class DocumentResponse(BaseModel):
     """
     Modello per la risposta dell'elaborazione del documento

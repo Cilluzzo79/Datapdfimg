@@ -1,57 +1,119 @@
 """
-FastAPI app che utilizza pandas per elaborare un file CSV/Excel
+FastAPI app principale
 """
-from fastapi import FastAPI, UploadFile, File
-import pandas as pd
-import io
+import time
+from typing import Optional
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+from app.models.document import DocumentRequest
+from app.models.response import DocumentResponse
+from app.services.tabular_processor import TabularProcessor
+
+app = FastAPI(
+    title="Document Processing API",
+    description="API per l'elaborazione di documenti business",
+    version="1.0.0"
+)
+
+# Configurazione CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In produzione, limitare alle origini autorizzate
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 async def root():
-    return {"message": "Pandas Test - File Processing"}
+    return {"message": "Tabular Data Processor - Versione 1.0"}
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
 
-@app.post("/process-file")
-async def process_file(file: UploadFile = File(...)):
+@app.post("/process-document", response_model=DocumentResponse)
+async def process_document(
+    file: UploadFile = File(...),
+    document_type: Optional[str] = Form(None)
+):
     """
-    Processa un file CSV o Excel molto semplicemente
+    Elabora un documento caricato (CSV o Excel)
+    
+    Args:
+        file: File da elaborare
+        document_type: Tipo di documento (opzionale)
+        
+    Returns:
+        Risposta con i dati estratti dal documento
     """
+    start_time = time.time()
+    
     try:
-        # Leggi il contenuto del file
-        content = await file.read()
-        
-        # Crea un BytesIO object
-        file_obj = io.BytesIO(content)
-        
         # Determina il tipo di file dall'estensione
-        if file.filename.endswith(('.xlsx', '.xls')):
-            # Leggi Excel
-            df = pd.read_excel(file_obj)
+        file_type = None
+        if file.filename.endswith(('.xlsx', '.xls', '.xlsm', '.xlsb')):
+            file_type = "excel"
         elif file.filename.endswith('.csv'):
-            # Leggi CSV
-            df = pd.read_csv(file_obj)
+            file_type = "csv"
         else:
-            return {"error": "Formato file non supportato"}
+            raise HTTPException(status_code=400, detail=f"Tipo di file non supportato: {file.filename}")
         
-        # Restituisci informazioni di base sul dataframe
-        result = {
-            "filename": file.filename,
-            "rows": len(df),
-            "columns": df.columns.tolist(),
-            "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()},
-            "head": df.head(2).to_dict(orient='records')  # Prime 2 righe come esempio
-        }
+        # Elabora il file con TabularProcessor
+        result = await TabularProcessor.process_tabular(file, file_type, document_type)
         
-        return result
+        # Calcola il tempo di elaborazione
+        processing_time_ms = int((time.time() - start_time) * 1000)
+        
+        # Crea la risposta
+        response = DocumentResponse(
+            document_type=result["document_type"],
+            processing_time_ms=processing_time_ms,
+            result_json=result,
+            processing_notes=result.get("processing_notes", [])
+        )
+        
+        return response
+    
     except Exception as e:
-        # Log dettagliato dell'errore
+        # Calcola il tempo di elaborazione anche in caso di errore
+        processing_time_ms = int((time.time() - start_time) * 1000)
+        
+        # Log dell'errore
         error_details = {
             "error_type": str(type(e).__name__),
             "error_message": str(e),
-            "filename": file.filename,
+            "filename": file.filename if file else "unknown",
         }
-        return {"error": "Errore durante l'elaborazione del file", "details": error_details}
+        
+        # Crea una risposta di errore
+        response = DocumentResponse(
+            status="error",
+            document_type="error",
+            processing_time_ms=processing_time_ms,
+            result_json={
+                "error": str(e),
+                "error_details": error_details
+            },
+            processing_notes=[f"Errore durante l'elaborazione: {str(e)}"]
+        )
+        
+        return response
+
+@app.post("/test-webhook")
+async def test_webhook(request: dict):
+    """
+    Endpoint per testare l'integrazione webhook con N8N
+    
+    Args:
+        request: Payload di test
+        
+    Returns:
+        Echo del payload ricevuto con timestamp
+    """
+    return {
+        "status": "success",
+        "timestamp": time.time(),
+        "received_payload": request
+    }

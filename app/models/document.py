@@ -33,13 +33,6 @@ class TabularMetadata(BaseModel):
     separator: Optional[str] = None  # Solo per CSV
 
 
-class TabularExtractedData(BaseModel):
-    """
-    Dati estratti da un file tabellare (Excel o CSV)
-    """
-    __root__: Dict[str, List[Dict[str, Any]]]
-
-
 class TabularDocument(BaseModel):
     """
     Documento tabellare (Excel o CSV) elaborato

@@ -1,3 +1,3 @@
 """
-Modelli Pydantic per documenti
+__init__.py per il modulo models
 """
