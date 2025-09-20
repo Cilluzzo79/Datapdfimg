@@ -1,10 +1,10 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.minimal"
+dockerfilePath = "Dockerfile.tabular"
 
 [deploy]
 healthcheckPath = "/health"
-healthcheckTimeout = 180  # Aumentato a 3 minuti
+healthcheckTimeout = 180  # Mantenuto a 3 minuti
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 

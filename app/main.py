@@ -1,20 +1,19 @@
 """
-FastAPI app principale con supporto per feature flags
+FastAPI app con supporto per elaborazione file Excel/CSV
 """
 import time
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+# Import delle classi necessarie dal backup
+from app.services.tabular_processor import TabularProcessor
 from app.models.document import DocumentRequest
 from app.models.response import DocumentResponse
-from app.services.tabular_processor import TabularProcessor
-from app.services.pdf_processor_simple import PDFProcessor
-from app.config import settings
 
 app = FastAPI(
-    title="Document Processing API",
-    description="API per l'elaborazione di documenti business",
+    title="Tabular Document Processing API",
+    description="API per l'elaborazione di documenti tabulari (Excel, CSV)",
     version="1.0.0"
 )
 
@@ -29,38 +28,11 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    # Mostra lo stato dei feature flags
-    features = {
-        "tabular_processing": settings.ENABLE_TABULAR_PROCESSING,
-        "pdf_processing": settings.ENABLE_PDF_PROCESSING,
-        "advanced_pdf": settings.ENABLE_ADVANCED_PDF,
-        "ocr": settings.ENABLE_OCR,
-        "image_processing": settings.ENABLE_IMAGE_PROCESSING
-    }
-    
-    return {
-        "message": "Document Worker API - Versione 1.0",
-        "features": features
-    }
+    return {"message": "Tabular Data Processor - Excel/CSV Only"}
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
-
-@app.get("/features")
-async def feature_flags():
-    """
-    Mostra lo stato corrente dei feature flags
-    """
-    return {
-        "features": {
-            "tabular_processing": settings.ENABLE_TABULAR_PROCESSING,
-            "pdf_processing": settings.ENABLE_PDF_PROCESSING,
-            "advanced_pdf": settings.ENABLE_ADVANCED_PDF,
-            "ocr": settings.ENABLE_OCR,
-            "image_processing": settings.ENABLE_IMAGE_PROCESSING
-        }
-    }
 
 @app.post("/process-document", response_model=DocumentResponse)
 async def process_document(
@@ -68,7 +40,7 @@ async def process_document(
     document_type: Optional[str] = Form(None)
 ):
     """
-    Elabora un documento caricato (CSV, Excel, PDF o Immagine)
+    Elabora un documento tabellare (Excel o CSV)
     
     Args:
         file: File da elaborare
@@ -82,43 +54,22 @@ async def process_document(
     try:
         # Determina il tipo di file dall'estensione
         file_type = None
-        if file.filename.endswith(tuple(settings.ALLOWED_EXCEL_EXTENSIONS)):
-            if not settings.ENABLE_TABULAR_PROCESSING:
-                raise HTTPException(status_code=400, detail="Elaborazione file Excel disabilitata")
+        if file.filename.endswith(('.xlsx', '.xls', '.xlsm', '.xlsb')):
             file_type = "excel"
-        elif file.filename.endswith(tuple(settings.ALLOWED_CSV_EXTENSIONS)):
-            if not settings.ENABLE_TABULAR_PROCESSING:
-                raise HTTPException(status_code=400, detail="Elaborazione file CSV disabilitata")
+        elif file.filename.endswith('.csv'):
             file_type = "csv"
-        elif file.filename.endswith(tuple(settings.ALLOWED_PDF_EXTENSIONS)):
-            if not settings.ENABLE_PDF_PROCESSING:
-                raise HTTPException(status_code=400, detail="Elaborazione PDF disabilitata")
-            file_type = "pdf"
-        elif file.filename.endswith(tuple(settings.ALLOWED_IMAGE_EXTENSIONS)):
-            if not settings.ENABLE_IMAGE_PROCESSING:
-                raise HTTPException(status_code=400, detail="Elaborazione immagini disabilitata")
-            file_type = "image"
         else:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Tipo di file non supportato: {file.filename}. Estensioni supportate: " + 
-                       f"{', '.join(settings.ALLOWED_EXCEL_EXTENSIONS + settings.ALLOWED_CSV_EXTENSIONS + settings.ALLOWED_PDF_EXTENSIONS + settings.ALLOWED_IMAGE_EXTENSIONS)}"
-            )
+            raise HTTPException(status_code=400, detail=f"Tipo di file non supportato: {file.filename}. Sono supportati solo file Excel e CSV.")
         
-        # Elabora il file in base al tipo
-        if file_type == "excel" or file_type == "csv":
-            result = await TabularProcessor.process_tabular(file, file_type, document_type)
-        elif file_type == "pdf":
-            result = await PDFProcessor.process_pdf(file, document_type)
-        else:
-            raise HTTPException(status_code=400, detail=f"Elaborazione per il tipo di file {file_type} non implementata")
+        # Elabora il file con TabularProcessor
+        result = await TabularProcessor.process_tabular(file, file_type, document_type)
         
         # Calcola il tempo di elaborazione
         processing_time_ms = int((time.time() - start_time) * 1000)
         
         # Crea la risposta
         response = DocumentResponse(
-            document_type=result["document_type"],
+            document_type=result.get("document_type", "unknown"),
             processing_time_ms=processing_time_ms,
             result_json=result,
             processing_notes=result.get("processing_notes", [])
