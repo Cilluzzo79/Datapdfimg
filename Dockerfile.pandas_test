@@ -2,8 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Installiamo le dipendenze, incluso pandas, ma senza usarlo
-RUN pip install fastapi uvicorn pandas
+# Installiamo le dipendenze, inclusi i pacchetti per elaborare file
+RUN pip install fastapi uvicorn pandas openpyxl xlrd python-multipart
 
 # Copiamo solo main.py semplificato
 COPY app/main.py ./app/
