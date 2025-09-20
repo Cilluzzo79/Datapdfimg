@@ -2,10 +2,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Solo dipendenze essenziali
 RUN pip install fastapi uvicorn
 
-COPY minimal_app.py .
+# Copiamo un file app.py minimo
+COPY minimal_app.py ./app.py
 
+# Esponiamo la porta
 ENV PORT=8080
 
-CMD ["sh", "-c", "uvicorn minimal_app:app --host 0.0.0.0 --port ${PORT}"]
+# Comando per eseguire l'applicazione
+CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT}"]

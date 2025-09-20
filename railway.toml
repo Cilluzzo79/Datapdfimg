@@ -1,12 +1,12 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.unified"
+dockerfilePath = "Dockerfile.minimal"
 
 [deploy]
 healthcheckPath = "/health"
-healthcheckTimeout = 120  # Aumentiamo il timeout a 2 minuti
+healthcheckTimeout = 180  # Aumentato a 3 minuti
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 10  # Aumentiamo i tentativi di riavvio
+restartPolicyMaxRetries = 10
 
 [scale]
 min = 1

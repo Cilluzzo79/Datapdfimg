@@ -1,14 +1,11 @@
-"""
-App minima per il test di deployment
-"""
 from fastapi import FastAPI
 
 app = FastAPI()
 
 @app.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "Minimal App - Health Check Only"}
 
 @app.get("/health")
-async def health():
+async def health_check():
     return {"status": "healthy"}
