@@ -1,19 +1,19 @@
 """
-FastAPI app con supporto per elaborazione file Excel/CSV
+FastAPI app con supporto per elaborazione file Excel/CSV e PDF base
 """
 import time
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-# Import delle classi necessarie dal backup
 from app.services.tabular_processor import TabularProcessor
+from app.services.pdf_processor_basic import PDFProcessor
 from app.models.document import DocumentRequest
 from app.models.response import DocumentResponse
 
 app = FastAPI(
-    title="Tabular Document Processing API",
-    description="API per l'elaborazione di documenti tabulari (Excel, CSV)",
+    title="Document Processing API",
+    description="API per l'elaborazione di documenti (Excel, CSV, PDF)",
     version="1.0.0"
 )
 
@@ -28,7 +28,7 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "Tabular Data Processor - Excel/CSV Only"}
+    return {"message": "Document Processor - Excel/CSV + PDF base"}
 
 @app.get("/health")
 async def health_check():
@@ -40,7 +40,7 @@ async def process_document(
     document_type: Optional[str] = Form(None)
 ):
     """
-    Elabora un documento tabellare (Excel o CSV)
+    Elabora un documento (Excel, CSV o PDF)
     
     Args:
         file: File da elaborare
@@ -58,11 +58,18 @@ async def process_document(
             file_type = "excel"
         elif file.filename.endswith('.csv'):
             file_type = "csv"
+        elif file.filename.endswith('.pdf'):
+            file_type = "pdf"
         else:
-            raise HTTPException(status_code=400, detail=f"Tipo di file non supportato: {file.filename}. Sono supportati solo file Excel e CSV.")
+            raise HTTPException(status_code=400, detail=f"Tipo di file non supportato: {file.filename}. Supportati: Excel, CSV, PDF.")
         
-        # Elabora il file con TabularProcessor
-        result = await TabularProcessor.process_tabular(file, file_type, document_type)
+        # Elabora il file in base al tipo
+        if file_type == "excel" or file_type == "csv":
+            result = await TabularProcessor.process_tabular(file, file_type, document_type)
+        elif file_type == "pdf":
+            result = await PDFProcessor.process_pdf(file, document_type)
+        else:
+            raise HTTPException(status_code=400, detail=f"Tipo di file non supportato: {file_type}")
         
         # Calcola il tempo di elaborazione
         processing_time_ms = int((time.time() - start_time) * 1000)

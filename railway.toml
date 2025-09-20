@@ -1,6 +1,6 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.tabular"
+dockerfilePath = "Dockerfile.complete"
 
 [deploy]
 healthcheckPath = "/health"

@@ -2,18 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Installiamo dipendenze per Tesseract OCR e Poppler
-RUN apt-get update && apt-get install -y \
-    tesseract-ocr \
-    tesseract-ocr-ita \
-    tesseract-ocr-eng \
-    poppler-utils \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Installiamo le dipendenze Python
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Dipendenze per elaborazione tabellare e PDF
+RUN pip install fastapi uvicorn pandas openpyxl xlrd python-multipart pydantic pypdf
 
 # Copiamo il codice dell'applicazione
 COPY app ./app
