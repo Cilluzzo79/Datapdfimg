@@ -14,3 +14,4 @@ aiofiles==23.2.1
 loguru==0.7.2
 uuid==1.30
 psutil==5.9.5
+RUN pip install aiofiles==23.2.1
