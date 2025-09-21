@@ -16,3 +16,4 @@ python-dotenv==1.0.0
 tenacity==8.2.3
 loguru==0.7.2
 pymupdf==1.23.10
+RUN pip install aiofiles==23.2.1
