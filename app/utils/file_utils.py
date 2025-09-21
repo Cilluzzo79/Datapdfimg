@@ -31,9 +31,14 @@ def is_allowed_pdf(filename: str) -> bool:
     return ext in settings.ALLOWED_PDF_EXTENSIONS
 
 
+def is_allowed_tabular(filename: str) -> bool:
+    """Verifica se il file è un file tabellare supportato (Excel, CSV)"""
+    ext = get_file_extension(filename)
+    return ext in settings.ALLOWED_TABULAR_EXTENSIONS
+
 def is_allowed_file(filename: str) -> bool:
     """Verifica se il file è supportato"""
-    return is_allowed_image(filename) or is_allowed_pdf(filename)
+    return is_allowed_image(filename) or is_allowed_pdf(filename) or is_allowed_tabular(filename)
 
 
 def get_file_type(filename: str) -> str:

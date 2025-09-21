@@ -43,3 +43,10 @@ class WebhookTestResponse(BaseModel):
     simulated_processing_time_ms: int
     test_document_id: str
     message: str
+
+
+class FeaturesResponse(BaseModel):
+    """Risposta per l'endpoint /features"""
+    status: str = "ok"
+    timestamp: datetime = Field(default_factory=datetime.now)
+    features: Dict[str, bool]

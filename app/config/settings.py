@@ -15,8 +15,9 @@ class Settings(BaseSettings):
     ENVIRONMENT: Environment = Environment.DEVELOPMENT
     
     # Chiavi API
-    OPENROUTER_API_KEY: str
+    OPENROUTER_API_KEY: Optional[str] = None
     OPENROUTER_API_URL: str = "https://openrouter.ai/api/v1"
+    MISTRAL_API_KEY: Optional[str] = None
     
     # Configurazione app
     APP_NAME: str = "Railway Document Worker"
@@ -26,6 +27,7 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: int = 10
     ALLOWED_IMAGE_EXTENSIONS: list[str] = ["jpg", "jpeg", "png", "webp"]
     ALLOWED_PDF_EXTENSIONS: list[str] = ["pdf"]
+    ALLOWED_TABULAR_EXTENSIONS: list[str] = ["xls", "xlsx", "csv"]
     
     # Logging
     LOG_LEVEL: str = "INFO"
@@ -42,6 +44,14 @@ class Settings(BaseSettings):
     
     # Parametri JSON
     JSON_OUTPUT_INDENT: int = 2
+    
+    # Feature flags
+    ENABLE_TABULAR_PROCESSING: bool = os.getenv("ENABLE_TABULAR_PROCESSING", "true").lower() == "true"
+    ENABLE_PDF_PROCESSING: bool = os.getenv("ENABLE_PDF_PROCESSING", "true").lower() == "true"
+    ENABLE_ADVANCED_PDF: bool = os.getenv("ENABLE_ADVANCED_PDF", "false").lower() == "true"
+    ENABLE_OCR: bool = os.getenv("ENABLE_OCR", "false").lower() == "true"
+    ENABLE_IMAGE_PROCESSING: bool = os.getenv("ENABLE_IMAGE_PROCESSING", "false").lower() == "true"
+    ENABLE_MISTRAL_VISION: bool = os.getenv("ENABLE_MISTRAL_VISION", "false").lower() == "true"
     
     class Config:
         env_file = ".env"

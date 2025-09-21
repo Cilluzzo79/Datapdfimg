@@ -15,7 +15,8 @@ from app.models.response import (
     HealthResponse, 
     ErrorResponse, 
     ProcessDocumentResponse,
-    WebhookTestResponse
+    WebhookTestResponse,
+    FeaturesResponse
 )
 from app.services.document_processor import DocumentProcessor
 from app.utils.file_utils import save_upload_file, cleanup_temp_directory
@@ -100,6 +101,26 @@ async def health_check():
     )
 
 
+# Endpoint per mostrare i feature flags attivi
+@app.get("/features", response_model=FeaturesResponse, tags=["System"])
+async def feature_flags():
+    """
+    Mostra lo stato corrente dei feature flags
+    """
+    logger.info("Richiesta stato feature flags")
+    return FeaturesResponse(
+        status="ok",
+        features={
+            "tabular_processing": settings.ENABLE_TABULAR_PROCESSING,
+            "pdf_processing": settings.ENABLE_PDF_PROCESSING,
+            "advanced_pdf": settings.ENABLE_ADVANCED_PDF,
+            "ocr": settings.ENABLE_OCR,
+            "image_processing": settings.ENABLE_IMAGE_PROCESSING,
+            "mistral_vision": settings.ENABLE_MISTRAL_VISION
+        }
+    )
+
+
 # Endpoint per il processamento di documenti
 @app.post("/process-document", response_model=ProcessDocumentResponse, tags=["Document"])
 async def process_document(
@@ -124,6 +145,23 @@ async def process_document(
         
         # Valida il file
         file_type, original_filename = await validate_file(file)
+        
+        # Verifica i feature flags in base al tipo di file
+        if file_type == "image":
+            if not settings.ENABLE_IMAGE_PROCESSING:
+                logger.warning(f"Elaborazione immagini disabilitata: {original_filename}")
+                raise HTTPException(status_code=400, detail="Elaborazione immagini disabilitata")
+        
+        elif file_type == "pdf":
+            if not settings.ENABLE_PDF_PROCESSING:
+                logger.warning(f"Elaborazione PDF disabilitata: {original_filename}")
+                raise HTTPException(status_code=400, detail="Elaborazione PDF disabilitata")
+        
+        # Verifica file tabellari (Excel, CSV)
+        elif file_type in ["xlsx", "xls", "csv"]:
+            if not settings.ENABLE_TABULAR_PROCESSING:
+                logger.warning(f"Elaborazione file tabellari disabilitata: {original_filename}")
+                raise HTTPException(status_code=400, detail="Elaborazione file tabellari disabilitata")
         
         # Crea la richiesta di processamento
         processing_request = ProcessingRequest(

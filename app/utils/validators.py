@@ -64,6 +64,8 @@ async def validate_file(file: UploadFile) -> Tuple[str, str]:
         file_type = "image"
     elif is_allowed_pdf(filename):
         file_type = "pdf"
+    elif is_allowed_excel(filename):
+        file_type = "excel"
     else:
         logger.error(f"Tipo di file non classificato: {filename}")
         raise HTTPException(status_code=400, detail="Tipo di file non classificato")
