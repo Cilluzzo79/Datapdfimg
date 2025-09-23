@@ -2,6 +2,7 @@
 Configurazione dell'applicazione
 """
 import os
+from pathlib import Path
 
 # Configurazione generale
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
@@ -38,3 +39,74 @@ OCR_LANGUAGE = os.getenv("OCR_LANGUAGE", "ita+eng")
 ALLOWED_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp']
 ALLOWED_PDF_EXTENSIONS = ['pdf']
 ALLOWED_TABULAR_EXTENSIONS = ['xls', 'xlsx', 'xlsm', 'xlsb', 'csv']
+ALLOWED_EXCEL_EXTENSIONS = ['xls', 'xlsx', 'xlsm', 'xlsb']
+ALLOWED_CSV_EXTENSIONS = ['csv']
+
+class Settings:
+    """Classe che contiene tutte le impostazioni dell'applicazione"""
+    DEBUG = DEBUG
+    LOG_LEVEL = LOG_LEVEL
+    MAX_FILE_SIZE_MB = MAX_FILE_SIZE_MB
+    TEMP_FOLDER = TEMP_FOLDER
+    
+    # Feature flags
+    ENABLE_TABULAR_PROCESSING = ENABLE_TABULAR_PROCESSING
+    ENABLE_PDF_PROCESSING = ENABLE_PDF_PROCESSING
+    ENABLE_ADVANCED_PDF = ENABLE_ADVANCED_PDF
+    ENABLE_OCR = ENABLE_OCR
+    ENABLE_IMAGE_PROCESSING = ENABLE_IMAGE_PROCESSING
+    ENABLE_MISTRAL_VISION = ENABLE_MISTRAL_VISION
+    
+    # Supporto per Claude
+    ENABLE_CLAUDE_FORMAT = ENABLE_CLAUDE_FORMAT
+    CLAUDE_INCLUDE_RAW_TEXT = CLAUDE_INCLUDE_RAW_TEXT
+    CLAUDE_MAX_RAW_TEXT_LENGTH = CLAUDE_MAX_RAW_TEXT_LENGTH
+    
+    # Configurazione LLM
+    OPENROUTER_API_KEY = OPENROUTER_API_KEY
+    OPENROUTER_API_URL = OPENROUTER_API_URL
+    LLM_MODEL = LLM_MODEL
+    LLM_TIMEOUT = LLM_TIMEOUT
+    
+    # Configurazione Mistral
+    MISTRAL_API_KEY = MISTRAL_API_KEY
+    
+    # Configurazione OCR
+    OCR_LANGUAGE = OCR_LANGUAGE
+    
+    # Estensioni di file supportate
+    ALLOWED_IMAGE_EXTENSIONS = ALLOWED_IMAGE_EXTENSIONS
+    ALLOWED_PDF_EXTENSIONS = ALLOWED_PDF_EXTENSIONS
+    ALLOWED_TABULAR_EXTENSIONS = ALLOWED_TABULAR_EXTENSIONS
+    ALLOWED_EXCEL_EXTENSIONS = ALLOWED_EXCEL_EXTENSIONS
+    ALLOWED_CSV_EXTENSIONS = ALLOWED_CSV_EXTENSIONS
+
+    def is_allowed_extension(self, filename: str, extensions: list) -> bool:
+        """Verifica se un file ha un'estensione consentita"""
+        ext = Path(filename).suffix.lstrip('.').lower()
+        return ext in extensions
+
+    def is_allowed_file(self, filename: str) -> bool:
+        """Verifica se il file ha un'estensione consentita"""
+        return (self.is_allowed_extension(filename, self.ALLOWED_IMAGE_EXTENSIONS) or 
+                self.is_allowed_extension(filename, self.ALLOWED_PDF_EXTENSIONS) or
+                self.is_allowed_extension(filename, self.ALLOWED_TABULAR_EXTENSIONS))
+
+    def is_allowed_image(self, filename: str) -> bool:
+        """Verifica se il file è un'immagine supportata"""
+        return self.is_allowed_extension(filename, self.ALLOWED_IMAGE_EXTENSIONS)
+
+    def is_allowed_pdf(self, filename: str) -> bool:
+        """Verifica se il file è un PDF"""
+        return self.is_allowed_extension(filename, self.ALLOWED_PDF_EXTENSIONS)
+
+    def is_allowed_tabular(self, filename: str) -> bool:
+        """Verifica se il file è un file tabellare supportato"""
+        return self.is_allowed_extension(filename, self.ALLOWED_TABULAR_EXTENSIONS)
+    
+    def get_file_extension(self, filename: str) -> str:
+        """Ottiene l'estensione di un file"""
+        return Path(filename).suffix.lstrip('.').lower()
+
+# Crea un'istanza della classe Settings
+settings = Settings()
