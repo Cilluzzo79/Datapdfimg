@@ -1,10 +1,9 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Form, Request, Depends
+from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Form, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import uuid
 import time
-import json
 from datetime import datetime
 from typing import Optional, Dict, Any
 
@@ -15,13 +14,7 @@ from app.utils.logging_utils import get_logger, log_request, log_response, log_e
 from app.config.settings import settings
 
 # Importazioni dai modelli
-from app.models.document import ProcessingRequest, DocumentType
-from app.models.response import (
-    HealthResponse, 
-    ErrorResponse, 
-    ProcessDocumentResponse,
-    WebhookTestResponse
-)
+from app.models.response import ClaudeFormatResponse
 
 # Importazione del servizio di elaborazione documenti
 from app.services.document_processor import DocumentProcessor
@@ -30,8 +23,8 @@ logger = get_logger(__name__)
 
 # Crea l'app FastAPI
 app = FastAPI(
-    title=settings.APP_NAME,
-    version=settings.APP_VERSION,
+    title="Railway Document Worker",
+    version="1.1.0",
     description="API per il processamento di documenti business (immagini e PDF)"
 )
 
@@ -48,7 +41,6 @@ app.add_middleware(
 start_time = time.time()
 document_processor = DocumentProcessor()
 
-
 # Middleware per catturare errori globali
 @app.middleware("http")
 async def error_handling_middleware(request: Request, call_next):
@@ -60,22 +52,22 @@ async def error_handling_middleware(request: Request, call_next):
     except Exception as e:
         logger.exception(f"Errore non gestito: {e}")
         
-        error_response = ErrorResponse(
-            error_code="server_error",
-            message="Si è verificato un errore interno del server",
-            details={"error": str(e)}
-        )
+        error_response = {
+            "error_code": "server_error",
+            "message": "Si è verificato un errore interno del server",
+            "details": {"error": str(e)}
+        }
         
         return JSONResponse(
             status_code=500,
-            content=error_response.model_dump()
+            content=error_response
         )
 
 @app.get("/")
 def root():
     return {"status": "ok", "message": "Railway Document Worker is running"}
 
-@app.get("/health", response_model=HealthResponse)
+@app.get("/health")
 def health_check():
     """
     Verifica lo stato del servizio
@@ -85,22 +77,51 @@ def health_check():
     
     # Verifica connessioni API esterne
     api_connections = {
-        "openrouter": True  # Da implementare controllo effettivo
+        "openrouter": bool(settings.OPENROUTER_API_KEY),
+        "mistral": bool(settings.MISTRAL_API_KEY)
     }
     
-    return HealthResponse(
-        status="ok",
-        version=settings.APP_VERSION,
-        environment=settings.ENVIRONMENT,
-        api_connections=api_connections,
-        uptime_seconds=uptime_seconds
-    )
+    # Verifica feature flags
+    features = {
+        "tabular_processing": settings.ENABLE_TABULAR_PROCESSING,
+        "pdf_processing": settings.ENABLE_PDF_PROCESSING,
+        "advanced_pdf": settings.ENABLE_ADVANCED_PDF,
+        "ocr": settings.ENABLE_OCR,
+        "image_processing": settings.ENABLE_IMAGE_PROCESSING,
+        "mistral_vision": settings.ENABLE_MISTRAL_VISION,
+        "claude_format": settings.ENABLE_CLAUDE_FORMAT
+    }
+    
+    return {
+        "status": "ok",
+        "version": "1.1.0",
+        "environment": os.getenv("ENVIRONMENT", "development"),
+        "api_connections": api_connections,
+        "features": features,
+        "uptime_seconds": uptime_seconds
+    }
 
-@app.post("/process-document", response_model=ProcessDocumentResponse)
+@app.get("/features")
+async def feature_flags():
+    """
+    Mostra lo stato corrente dei feature flags
+    """
+    return {
+        "features": {
+            "tabular_processing": settings.ENABLE_TABULAR_PROCESSING,
+            "pdf_processing": settings.ENABLE_PDF_PROCESSING,
+            "advanced_pdf": settings.ENABLE_ADVANCED_PDF,
+            "ocr": settings.ENABLE_OCR,
+            "image_processing": settings.ENABLE_IMAGE_PROCESSING,
+            "mistral_vision": settings.ENABLE_MISTRAL_VISION,
+            "claude_format": settings.ENABLE_CLAUDE_FORMAT
+        }
+    }
+
+@app.post("/process-document")
 async def process_document(
     file: UploadFile = File(...),
     document_type: Optional[str] = Form(None),
-    custom_metadata: Optional[str] = Form(None),
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     """
@@ -118,14 +139,7 @@ async def process_document(
         )
         
         # Valida il file
-        file_type, original_filename = await validate_file(file)
-        
-        # Crea la richiesta di processamento
-        processing_request = ProcessingRequest(
-            document_id=str(uuid.uuid4()),
-            document_type_hint=DocumentType(document_type) if document_type else None,
-            custom_metadata=json.loads(custom_metadata) if custom_metadata else None
-        )
+        file_type, filename = await validate_file(file)
         
         # Salva il file
         file_path, md5_hash, file_size = await save_upload_file(file)
@@ -133,24 +147,26 @@ async def process_document(
         # Processa il documento
         result = await document_processor.process_document(
             file_path=file_path,
-            original_filename=original_filename,
+            original_filename=filename,
             file_size=file_size,
             md5_hash=md5_hash,
-            request=processing_request
+            document_type_hint=document_type
         )
         
         # Calcola il tempo di elaborazione
         processing_time_ms = int((time.time() - start_process_time) * 1000)
         
         # Preparazione della risposta
-        response = ProcessDocumentResponse(
-            document_id=result.document_id,
-            document_type=result.document_type.value,
-            confidence_score=result.confidence_score,
-            processing_time_ms=processing_time_ms,
-            result_json=result.model_dump(),
-            processing_notes=result.processing_notes
-        )
+        response = {
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            "document_id": request_id,
+            "document_type": result.get("document_type", "sconosciuto"),
+            "confidence_score": result.get("confidence_score", 0.0),
+            "processing_time_ms": processing_time_ms,
+            "result_json": result,
+            "processing_notes": result.get("processing_notes", [])
+        }
         
         # Log della risposta
         log_response(
@@ -159,9 +175,6 @@ async def process_document(
             status_code=200,
             processing_time_ms=processing_time_ms
         )
-        
-        # Aggiungi task in background per la pulizia periodica
-        background_tasks.add_task(cleanup_temp_directory)
         
         return response
     except HTTPException as e:
@@ -187,62 +200,98 @@ async def process_document(
             detail=f"Errore durante il processamento del documento: {str(e)}"
         )
 
-@app.post("/process-document-simple")
-async def process_document_simple(
+@app.post("/process-for-claude", response_model=ClaudeFormatResponse)
+async def process_for_claude(
     file: UploadFile = File(...),
-    document_type: Optional[str] = None,
+    document_type: Optional[str] = Form(None),
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     """
-    Versione semplificata dell'endpoint di processamento documenti
+    Elabora un documento ed emette un output ottimizzato per Claude Sonnet
     """
-    request_id = str(uuid.uuid4())
-    start_processing_time = time.time()
-    
     try:
-        logger.info(f"Richiesta ricevuta: process-document-simple, filename: {file.filename}")
+        # Validazione del file
+        file_type, filename = await validate_file(file)
+        logger.info(f"File validato: {filename}, tipo: {file_type}")
         
-        # Valida il file
-        file_type, original_filename = await validate_file(file)
+        # Genera un ID documento
+        document_id = str(uuid.uuid4())
         
-        # Salva il file
+        # Salva il file temporaneamente
         file_path, md5_hash, file_size = await save_upload_file(file)
+        logger.info(f"File salvato: {file_path}, hash: {md5_hash}, dimensione: {file_size} bytes")
         
-        # Aggiungi task in background per la pulizia periodica
+        # Registra la richiesta in background
+        log_request(document_id, "/process-for-claude", {
+            "filename": filename,
+            "file_type": file_type,
+            "document_type": document_type,
+            "file_size": file_size,
+            "md5_hash": md5_hash
+        })
+        
+        # Elabora il documento
+        start_time = datetime.now()
+        
+        document_processor = DocumentProcessor()
+        claude_format = await document_processor.process_for_claude(
+            file_path=file_path,
+            original_filename=filename,
+            document_type_hint=document_type
+        )
+        
+        end_time = datetime.now()
+        processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
+        
+        # Pulizia del file temporaneo in background
         background_tasks.add_task(cleanup_temp_file, file_path)
         
-        # Calcola il tempo di elaborazione
-        processing_time_ms = int((time.time() - start_processing_time) * 1000)
+        # Registra la risposta in background
+        log_response(
+            document_id, 
+            "/process-for-claude", 
+            200, 
+            processing_time_ms
+        )
         
-        # Prepara la risposta
-        response = {
-            "status": "success",
-            "timestamp": time.time(),
-            "document_id": request_id,
-            "file_info": {
-                "file_type": file_type,
-                "original_filename": original_filename,
-                "file_size": file_size,
-                "md5_hash": md5_hash
-            },
-            "processing_time_ms": processing_time_ms,
-            "message": "File elaborato con successo (versione semplificata)"
-        }
-        
-        logger.info(f"Elaborazione completata: {original_filename}, tempo: {processing_time_ms}ms")
-        return response
+        # Restituisci il risultato
+        return ClaudeFormatResponse(
+            status="success",
+            timestamp=datetime.now(),
+            document_id=document_id,
+            document_type=claude_format["metadata"]["document_type"],
+            confidence_score=claude_format["metadata"]["confidence_score"],
+            claude_format=claude_format,
+            processing_notes=[]
+        )
+    
     except HTTPException as e:
-        logger.error(f"Errore HTTP durante l'elaborazione: {e.detail}")
+        # Rilancia le eccezioni HTTP
         raise
+    
     except Exception as e:
-        logger.error(f"Errore durante l'elaborazione: {str(e)}")
+        logger.error(f"Errore durante l'elaborazione: {e}")
+        # Registra l'errore
+        if 'document_id' in locals():
+            log_error(
+                document_id,
+                "/process-for-claude",
+                str(e),
+                {"exception": str(type(e).__name__)}
+            )
+        
+        # Cleanup del file temporaneo se esistente
+        if 'file_path' in locals():
+            background_tasks.add_task(cleanup_temp_file, file_path)
+        
+        # Restituisci errore
         raise HTTPException(
             status_code=500,
-            detail=f"Errore durante il processamento del documento: {str(e)}"
+            detail=f"Errore durante l'elaborazione del documento: {str(e)}"
         )
 
 @app.post("/test-webhook")
-async def test_webhook(background_tasks: BackgroundTasks):
+async def test_webhook():
     """
     Endpoint per testare l'integrazione webhook con N8N
     """
@@ -286,20 +335,41 @@ async def startup_event():
     """
     Eventi da eseguire all'avvio dell'applicazione
     """
-    logger.info(f"Avvio del servizio {settings.APP_NAME} v{settings.APP_VERSION} in ambiente {settings.ENVIRONMENT}")
+    logger.info(f"Avvio del servizio Railway Document Worker v1.1.0 con supporto Claude")
     
     # Verifica la presenza della cartella temporanea
     os.makedirs(settings.TEMP_FOLDER, exist_ok=True)
     logger.info(f"Cartella temporanea creata: {settings.TEMP_FOLDER}")
+    
+    # Verifica le caratteristiche abilitate
+    features_enabled = []
+    if settings.ENABLE_PDF_PROCESSING:
+        features_enabled.append("PDF Processing")
+    if settings.ENABLE_ADVANCED_PDF:
+        features_enabled.append("Advanced PDF")
+    if settings.ENABLE_OCR:
+        features_enabled.append("OCR")
+    if settings.ENABLE_IMAGE_PROCESSING:
+        features_enabled.append("Image Processing")
+    if settings.ENABLE_MISTRAL_VISION:
+        features_enabled.append("Mistral Vision")
+    if settings.ENABLE_CLAUDE_FORMAT:
+        features_enabled.append("Claude Format")
+    
+    logger.info(f"Caratteristiche abilitate: {', '.join(features_enabled)}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """
     Eventi da eseguire alla chiusura dell'applicazione
     """
-    logger.info(f"Arresto del servizio {settings.APP_NAME}")
+    logger.info("Arresto del servizio Railway Document Worker")
+    
+    # Pulizia della cartella temporanea
+    cleanup_temp_directory()
 
 # Punto di ingresso per il server uvicorn
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)

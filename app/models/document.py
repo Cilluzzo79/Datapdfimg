@@ -1,8 +1,19 @@
 """
 Modelli Pydantic per documenti
 """
+from enum import Enum
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
+
+
+class DocumentType(str, Enum):
+    """Tipi di documenti supportati"""
+    FATTURA = "fattura"
+    BILANCIO = "bilancio"
+    MAGAZZINO = "magazzino"
+    CORRISPETTIVO = "corrispettivo"
+    ANALISI_MERCATO = "analisi_mercato"
+    GENERICO = "documento_generico"
 
 
 class DocumentRequest(BaseModel):

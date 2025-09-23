@@ -15,13 +15,9 @@ from app.utils.file_utils import (
 from app.services.image_processor import ImageProcessor
 from app.services.pdf_processor import PDFProcessor
 from app.services.llm_service import LLMService
-from app.models.document import (
-    DocumentType, 
-    FileType, 
-    DocumentMetadata, 
-    DocumentProcessingResult,
-    ProcessingRequest
-)
+from app.services.claude_formatter import ClaudeFormatter
+from app.models.document import DocumentType
+from app.models.response import ClaudeFormatResponse
 
 logger = get_logger(__name__)
 
@@ -42,8 +38,8 @@ class DocumentProcessor:
         original_filename: str, 
         file_size: int,
         md5_hash: str,
-        request: Optional[ProcessingRequest] = None
-    ) -> DocumentProcessingResult:
+        document_type_hint: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Processa un documento e restituisce i risultati
         
@@ -52,7 +48,7 @@ class DocumentProcessor:
             original_filename: Nome originale del file
             file_size: Dimensione del file in byte
             md5_hash: Hash MD5 del file
-            request: Richiesta di processamento (opzionale)
+            document_type_hint: Suggerimento sul tipo di documento (opzionale)
             
         Returns:
             Risultato del processamento del documento
@@ -62,18 +58,14 @@ class DocumentProcessor:
         try:
             logger.info(f"Inizio processamento documento: {original_filename}")
             
-            # Crea richiesta se non fornita
-            if not request:
-                request = ProcessingRequest()
-            
             # Determina il tipo di file
             file_extension = get_file_extension(original_filename)
             if is_allowed_image(original_filename):
-                file_type = FileType(file_extension.lower())
-                result = await self._process_image(file_path, request.document_type_hint)
+                file_type = file_extension.lower()
+                result = await self._process_image(file_path, document_type_hint)
             elif is_allowed_pdf(original_filename):
-                file_type = FileType.PDF
-                result = await self._process_pdf(file_path, request.document_type_hint)
+                file_type = "pdf"
+                result = await self._process_pdf(file_path, document_type_hint)
             else:
                 raise ValueError(f"Tipo di file non supportato: {file_extension}")
             
@@ -81,62 +73,120 @@ class DocumentProcessor:
             processing_time_ms = int((time.time() - start_time) * 1000)
             
             # Crea i metadati
-            metadata = DocumentMetadata(
-                original_filename=original_filename,
-                file_type=file_type,
-                file_size=file_size,
-                pages_processed=result.get("metadata", {}).get("page_count", 1) if "metadata" in result else 1,
-                processing_time_ms=processing_time_ms,
-                md5_hash=md5_hash
-            )
+            metadata = {
+                "original_filename": original_filename,
+                "file_type": file_type,
+                "file_size": file_size,
+                "pages_processed": result.get("metadata", {}).get("page_count", 1) if "metadata" in result else 1,
+                "processing_time_ms": processing_time_ms,
+                "md5_hash": md5_hash
+            }
             
-            # Crea il risultato
-            document_result = DocumentProcessingResult(
-                document_id=request.document_id,
-                document_type=DocumentType(result.get("document_type", "sconosciuto")),
-                confidence_score=result.get("confidence_score", 0.0),
-                metadata=metadata,
-                extracted_data=result.get("extracted_data", {}),
-                raw_text=result.get("raw_text", ""),
-                processing_notes=result.get("processing_notes", []),
-                llm_ready=True
-            )
+            # Aggiungi i metadati al risultato
+            result["metadata"] = {**result.get("metadata", {}), **metadata}
             
             logger.info(f"Processamento documento completato: {original_filename}, "
-                        f"tipo: {document_result.document_type}, "
-                        f"confidence: {document_result.confidence_score:.2f}, "
+                        f"tipo: {result.get('document_type', 'sconosciuto')}, "
+                        f"confidence: {result.get('confidence_score', 0.0):.2f}, "
                         f"tempo: {processing_time_ms}ms")
             
-            return document_result
+            return result
         except Exception as e:
             logger.error(f"Errore durante il processamento del documento {original_filename}: {e}")
             
             # Calcola il tempo di processamento anche in caso di errore
             processing_time_ms = int((time.time() - start_time) * 1000)
             
-            # Crea metadati minimi
-            metadata = DocumentMetadata(
-                original_filename=original_filename,
-                file_type=FileType(get_file_extension(original_filename).lower()),
-                file_size=file_size,
-                pages_processed=0,
-                processing_time_ms=processing_time_ms,
-                md5_hash=md5_hash
-            )
-            
             # Crea risultato di errore
-            document_result = DocumentProcessingResult(
-                document_id=request.document_id if request else str(uuid.uuid4()),
-                document_type=DocumentType.SCONOSCIUTO,
-                confidence_score=0.0,
-                metadata=metadata,
-                extracted_data={},
-                raw_text="",
-                processing_notes=[f"Errore durante il processamento: {str(e)}"],
-                llm_ready=False
+            return {
+                "document_type": "documento_generico",
+                "confidence_score": 0.0,
+                "metadata": {
+                    "original_filename": original_filename,
+                    "file_type": file_extension.lower(),
+                    "file_size": file_size,
+                    "pages_processed": 0,
+                    "processing_time_ms": processing_time_ms,
+                    "md5_hash": md5_hash,
+                    "error": str(e)
+                },
+                "extracted_data": {},
+                "raw_text": "",
+                "processing_notes": [f"Errore durante il processamento: {str(e)}"]
+            }
+        finally:
+            # Pulisci il file temporaneo
+            cleanup_temp_file(file_path)
+    
+    async def process_for_claude(
+        self, 
+        file_path: str, 
+        original_filename: str, 
+        document_type_hint: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Elabora un documento e formatta il risultato per Claude
+        
+        Args:
+            file_path: Percorso del file
+            original_filename: Nome originale del file
+            document_type_hint: Suggerimento sul tipo di documento (opzionale)
+            
+        Returns:
+            Risultato dell'elaborazione formattato per Claude
+        """
+        try:
+            # Genera ID documento
+            document_id = str(uuid.uuid4())
+            logger.info(f"Inizio processamento per Claude: {original_filename} (ID: {document_id})")
+            
+            # Determina il tipo di file
+            file_extension = get_file_extension(original_filename)
+            if is_allowed_image(original_filename):
+                file_type = file_extension.lower()
+                result = await self._process_image(file_path, document_type_hint)
+            elif is_allowed_pdf(original_filename):
+                file_type = "pdf"
+                result = await self._process_pdf(file_path, document_type_hint)
+            else:
+                raise ValueError(f"Tipo di file non supportato: {file_extension}")
+            
+            # Aggiungi metadati di base
+            metadata = {
+                "original_filename": original_filename,
+                "file_type": file_type
+            }
+            
+            # Formatta il risultato per Claude
+            claude_format = ClaudeFormatter.format_for_claude(
+                document_type=result.get("document_type", "documento_generico"),
+                metadata=result.get("metadata", metadata),
+                extracted_data=result.get("extracted_data", {}),
+                confidence_score=result.get("confidence_score", 0.8),
+                raw_text=result.get("raw_text", ""),
+                processing_notes=result.get("processing_notes", [])
             )
             
-            return document_result
+            logger.info(f"Processamento per Claude completato: {original_filename}, tipo: {claude_format['metadata']['document_type']}")
+            
+            return claude_format
+        except Exception as e:
+            logger.error(f"Errore durante l'elaborazione per Claude: {e}")
+            # Formato di fallback
+            return {
+                "metadata": {
+                    "document_type": "error",
+                    "file_name": original_filename,
+                    "error": str(e),
+                    "confidence_score": 0.0
+                },
+                "content": {},
+                "summary": f"Si è verificato un errore durante l'elaborazione del documento: {str(e)}",
+                "suggested_prompts": [
+                    "Come posso risolvere l'errore di elaborazione?",
+                    "Quali formati di file sono supportati da questo servizio?"
+                ]
+            }
         finally:
             # Pulisci il file temporaneo
             cleanup_temp_file(file_path)
@@ -144,7 +194,7 @@ class DocumentProcessor:
     async def _process_image(
         self, 
         image_path: str, 
-        document_type_hint: Optional[DocumentType] = None
+        document_type_hint: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Processa un'immagine
@@ -160,7 +210,7 @@ class DocumentProcessor:
             logger.info(f"Processamento immagine: {image_path}")
             
             # Estrai testo e analisi dall'immagine
-            text, image_analysis = self.image_processor.process_image(image_path)
+            text, image_analysis = await self.image_processor.process_image(image_path)
             
             # Se il testo è troppo corto, usa direttamente Mistral Vision
             if len(text.strip()) < 200:
@@ -199,7 +249,7 @@ class DocumentProcessor:
     async def _process_pdf(
         self, 
         pdf_path: str, 
-        document_type_hint: Optional[DocumentType] = None
+        document_type_hint: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Processa un PDF
@@ -215,37 +265,20 @@ class DocumentProcessor:
             logger.info(f"Processamento PDF: {pdf_path}")
             
             # Estrai testo e metadati dal PDF
-            text, pdf_info = self.pdf_processor.process_pdf(pdf_path)
+            result = await self.pdf_processor.process_pdf(pdf_path, document_type_hint)
+            text = result.get("raw_text", "")
             
-            # Analizza il testo con l'LLM
-            analysis = await self.llm_service.analyze_document_text(text, document_type_hint)
-            
-            # Aggiungi informazioni dal PDF
-            analysis["metadata"] = pdf_info.get("metadata", {})
-            analysis["raw_text"] = text
-            
-            # Aggiungi note sul processamento
-            processing_notes = []
-            
-            if analysis.get("error"):
-                processing_notes.append(f"Errore nell'analisi: {analysis['error']}")
-            
-            if pdf_info.get("error"):
-                processing_notes.append(f"Errore nell'estrazione PDF: {pdf_info['error']}")
-            
-            if pdf_info.get("is_searchable") is False:
-                processing_notes.append("PDF non ricercabile, testo estratto tramite OCR")
+            # Se non abbiamo già un'analisi dal PDF processor, usa l'LLM
+            if not result.get("extracted_data"):
+                # Analizza il testo con l'LLM
+                analysis = await self.llm_service.analyze_document_text(text, document_type_hint)
                 
-                # Aggiungi informazioni OCR
-                if pdf_info.get("ocr_results"):
-                    avg_confidence = sum(r.get("confidence", 0) for r in pdf_info["ocr_results"]) / len(pdf_info["ocr_results"])
-                    if avg_confidence < 70:
-                        processing_notes.append(f"Bassa confidenza OCR ({avg_confidence:.2f}%), i risultati potrebbero non essere accurati")
-            
-            analysis["processing_notes"] = processing_notes
+                # Aggiorna il risultato con l'analisi
+                result.update(analysis)
+                result["raw_text"] = text
             
             logger.info(f"Processamento PDF completato: {pdf_path}")
-            return analysis
+            return result
         except Exception as e:
             logger.error(f"Errore durante il processamento del PDF {pdf_path}: {e}")
             raise

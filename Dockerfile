@@ -1,28 +1,42 @@
 FROM python:3.11-slim
 
-WORKDIR /app
-
-# Installa dipendenze per Tesseract OCR e Poppler
+# Installa dipendenze di sistema
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-ita \
+    tesseract-ocr-eng \
     poppler-utils \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copia requirements e installa dipendenze Python
+WORKDIR /app
+
+# Copia requirements e installa dipendenze
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia il codice dell'applicazione
-COPY . .
+# Copia solo i file essenziali inizialmente
+COPY main.py .
+COPY app ./app
 
-# Copia e rende eseguibile lo script di entrypoint
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Crea la directory temporanea
+RUN mkdir -p /tmp/railway-document-worker
 
-# Espone la porta
-EXPOSE 8000
+# Configurazione feature flags (on/off)
+ENV ENABLE_TABULAR_PROCESSING=true
+ENV ENABLE_PDF_PROCESSING=true
+ENV ENABLE_ADVANCED_PDF=false
+ENV ENABLE_OCR=true
+ENV ENABLE_IMAGE_PROCESSING=true
+ENV ENABLE_MISTRAL_VISION=true
 
-# Comando per eseguire l'applicazione
-ENTRYPOINT ["/entrypoint.sh"]
+# Configurazione Claude
+ENV ENABLE_CLAUDE_FORMAT=true
+ENV CLAUDE_INCLUDE_RAW_TEXT=true
+ENV CLAUDE_MAX_RAW_TEXT_LENGTH=8000
+
+# Configurazione logging
+ENV LOG_LEVEL=INFO
+
+# Avvia l'app utilizzando la variabile d'ambiente PORT
+CMD uvicorn main:app --host 0.0.0.0 --port $PORT

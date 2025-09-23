@@ -18,3 +18,20 @@ class DocumentResponse(BaseModel):
     processing_time_ms: int
     result_json: Dict[str, Any]
     processing_notes: List[str] = []
+
+class ClaudeFormatResponse(BaseModel):
+    """
+    Modello per la risposta dell'endpoint process-for-claude
+    """
+    status: str = "success"
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    document_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    document_type: str
+    confidence_score: float = 0.95
+    claude_format: Dict[str, Any]
+    processing_notes: List[str] = []
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
