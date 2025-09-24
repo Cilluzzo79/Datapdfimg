@@ -10,10 +10,13 @@ from app.utils.file_utils import (
     get_file_extension, 
     is_allowed_image, 
     is_allowed_pdf,
+    is_allowed_excel,
+    is_allowed_csv,
     cleanup_temp_file
 )
 from app.services.image_processor import ImageProcessor
 from app.services.pdf_processor import PDFProcessor
+from app.services.tabular_processor import TabularProcessor
 from app.services.llm_service import LLMService
 from app.services.claude_formatter import ClaudeFormatter
 from app.models.document import DocumentType
@@ -29,6 +32,7 @@ class DocumentProcessor:
         """Inizializza il servizio di processamento documenti"""
         self.image_processor = ImageProcessor()
         self.pdf_processor = PDFProcessor()
+        self.tabular_processor = TabularProcessor()
         self.llm_service = LLMService()
         logger.info("Document Processor inizializzato")
     
@@ -60,12 +64,58 @@ class DocumentProcessor:
             
             # Determina il tipo di file
             file_extension = get_file_extension(original_filename)
+            
+            # Processa in base al tipo di file
             if is_allowed_image(original_filename):
                 file_type = file_extension.lower()
                 result = await self._process_image(file_path, document_type_hint)
             elif is_allowed_pdf(original_filename):
                 file_type = "pdf"
                 result = await self._process_pdf(file_path, document_type_hint)
+            elif is_allowed_excel(original_filename):
+                file_type = "excel"
+                # Crea un UploadFile simulato per tabular_processor
+                class MockUploadFile:
+                    def __init__(self, path, filename):
+                        self.path = path
+                        self.filename = filename
+                        self._file = open(path, 'rb')
+                    
+                    async def read(self):
+                        self._file.seek(0)
+                        return self._file.read()
+                    
+                    async def seek(self, offset):
+                        self._file.seek(offset)
+                        
+                    def close(self):
+                        self._file.close()
+                
+                mock_file = MockUploadFile(file_path, original_filename)
+                result = await self.tabular_processor.process_tabular(mock_file, "excel", document_type_hint)
+                mock_file.close()
+            elif is_allowed_csv(original_filename):
+                file_type = "csv"
+                # Crea un UploadFile simulato per tabular_processor
+                class MockUploadFile:
+                    def __init__(self, path, filename):
+                        self.path = path
+                        self.filename = filename
+                        self._file = open(path, 'rb')
+                    
+                    async def read(self):
+                        self._file.seek(0)
+                        return self._file.read()
+                    
+                    async def seek(self, offset):
+                        self._file.seek(offset)
+                        
+                    def close(self):
+                        self._file.close()
+                
+                mock_file = MockUploadFile(file_path, original_filename)
+                result = await self.tabular_processor.process_tabular(mock_file, "csv", document_type_hint)
+                mock_file.close()
             else:
                 raise ValueError(f"Tipo di file non supportato: {file_extension}")
             
@@ -142,12 +192,58 @@ class DocumentProcessor:
             
             # Determina il tipo di file
             file_extension = get_file_extension(original_filename)
+            
+            # Processa in base al tipo di file
             if is_allowed_image(original_filename):
                 file_type = file_extension.lower()
                 result = await self._process_image(file_path, document_type_hint)
             elif is_allowed_pdf(original_filename):
                 file_type = "pdf"
                 result = await self._process_pdf(file_path, document_type_hint)
+            elif is_allowed_excel(original_filename):
+                file_type = "excel"
+                # Crea un UploadFile simulato per tabular_processor
+                class MockUploadFile:
+                    def __init__(self, path, filename):
+                        self.path = path
+                        self.filename = filename
+                        self._file = open(path, 'rb')
+                    
+                    async def read(self):
+                        self._file.seek(0)
+                        return self._file.read()
+                    
+                    async def seek(self, offset):
+                        self._file.seek(offset)
+                        
+                    def close(self):
+                        self._file.close()
+                
+                mock_file = MockUploadFile(file_path, original_filename)
+                result = await self.tabular_processor.process_tabular(mock_file, "excel", document_type_hint)
+                mock_file.close()
+            elif is_allowed_csv(original_filename):
+                file_type = "csv"
+                # Crea un UploadFile simulato per tabular_processor
+                class MockUploadFile:
+                    def __init__(self, path, filename):
+                        self.path = path
+                        self.filename = filename
+                        self._file = open(path, 'rb')
+                    
+                    async def read(self):
+                        self._file.seek(0)
+                        return self._file.read()
+                    
+                    async def seek(self, offset):
+                        self._file.seek(offset)
+                        
+                    def close(self):
+                        self._file.close()
+                
+                mock_file = MockUploadFile(file_path, original_filename)
+                result = await self.tabular_processor.process_tabular(mock_file, "csv", document_type_hint)
+                mock_file.close()
             else:
                 raise ValueError(f"Tipo di file non supportato: {file_extension}")
             
